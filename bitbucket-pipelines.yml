@@ -1,0 +1,67 @@
+image: java:8
+
+pipelines:
+  default:
+    - step:
+        name: test bitbucket pipelines stuff..
+        script: # Modify the commands below to build your repository.
+          - export IMAGE_NAME2=easyad/easyad_gradle:$BITBUCKET_COMMIT
+          - /bin/bash bitbucket_pipeline_tests.sh
+    - step:
+          name: Building and pushing docker image
+          trigger: manual
+          caches:
+            - gradle
+          services:
+            - docker
+          script:
+            - bash ./gradlew pushDockerImage -x test
+          artifacts:
+            - 'results.json' 
+            - 'fingerprint: true'
+    - step:
+          name: Deploy to Staging
+          deployment: Staging
+          trigger: manual
+          script:
+            - echo "Starting deployment to Staging"
+            - pipe: atlassian/aws-ecs-deploy:0.3.0
+              variables:
+                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+                AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+                ECS_CLUSTER_NAME: 'adminPortalServicesCluster'
+                ECS_SERVICE_NAME: 'productCatalogServices'
+                ECS_TASK_DEFINITION: 'task-definition-staging.json'
+
+  branches:
+    master:
+      - step:
+          caches:
+            - gradle
+          script:
+            - bash ./gradlew build -i -x test
+      - step:
+          name: Building and pushing docker image
+          trigger: manual
+          caches:
+            - gradle
+          services:
+            - docker
+          script:
+            - bash ./gradlew pushDockerImage -x test
+
+      - step:
+          name: Deploy to Production
+          deployment: Production
+          trigger: manual
+          script:
+            - echo "Starting deployment to Production"
+            - pipe: atlassian/aws-ecs-deploy:0.3.0
+              variables:
+                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+                AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+                ECS_CLUSTER_NAME: 'adminPortalServicesCluster'
+                ECS_SERVICE_NAME: 'productCatalogServices'
+                ECS_TASK_DEFINITION: 'task-definition-production.json'
